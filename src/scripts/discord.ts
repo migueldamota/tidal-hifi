@@ -19,6 +19,21 @@ export const isRPCConnected = (): boolean => rpc !== null;
 
 const ACTIVITY_LISTENING = 2;
 
+// Discord's `status_display_type`: which activity field is shown in the compact status
+// line next to the user's name (member list / profile card). The full card always shows
+// details, state and the large image regardless of this value.
+const STATUS_DISPLAY_STATE = 1; // artist(s)
+const STATUS_DISPLAY_DETAILS = 2; // track title
+
+// The compact status only has room for one of title/artist. When `discord.cycleStatus` is
+// enabled we alternate between them; otherwise it stays on the artist. Keep the interval well
+// above Discord's rate limit (5 activity updates per 20 s), leaving headroom for the
+// track-change and seek updates that happen in between.
+const STATUS_CYCLE_INTERVAL = 10_000;
+
+let statusDisplayType = STATUS_DISPLAY_STATE;
+let statusCycleTimer: ReturnType<typeof setInterval> | null = null;
+
 // Reconnect backoff. Discord (or the RPC bridge) can disappear at any time; when it does
 // the library emits `disconnected` and we keep retrying until it becomes reachable again.
 const INITIAL_RETRY_DELAY = 10_000;
@@ -122,27 +137,31 @@ const pad = (input: string): string => input.padEnd(2, " ");
 const getFromStore = () => {
   const includeTimestamps =
     settingsStore.get<string, boolean>(settings.discord.includeTimestamps) ?? true;
+  const cycleStatus = settingsStore.get<string, boolean>(settings.discord.cycleStatus) ?? false;
   const detailsPrefix =
     settingsStore.get<string, string>(settings.discord.detailsPrefix) ?? "Listening to ";
   const buttonText =
     settingsStore.get<string, string>(settings.discord.buttonText) ?? "Play on TIDAL";
 
-  return { includeTimestamps, detailsPrefix, buttonText };
+  return { includeTimestamps, cycleStatus, detailsPrefix, buttonText };
 };
 
 const getActivity = (): SetActivity => {
   const presence: SetActivity = { ...defaultPresence };
 
   if (mediaInfo.status === MediaStatus.paused) {
+    syncStatusCycle(false);
     presence.details =
       settingsStore.get<string, string>(settings.discord.idleText) ?? "Browsing Tidal";
   } else {
     const showSong = settingsStore.get<string, boolean>(settings.discord.showSong) ?? false;
     if (showSong) {
-      const { includeTimestamps, detailsPrefix, buttonText } = getFromStore();
+      const { includeTimestamps, cycleStatus, detailsPrefix, buttonText } = getFromStore();
+      syncStatusCycle(cycleStatus);
       includeTimeStamps(includeTimestamps);
       setPresenceFromMediaInfo(detailsPrefix, buttonText);
     } else {
+      syncStatusCycle(false);
       presence.details =
         settingsStore.get<string, string>(settings.discord.usingText) ?? "Playing media on TIDAL";
     }
@@ -157,7 +176,7 @@ const getActivity = (): SetActivity => {
     const artists = pad(mediaInfo.artists);
 
     if (mediaInfo.url) {
-      presence.statusDisplayType = 1;
+      presence.statusDisplayType = statusDisplayType;
       presence.details = `${detailsPrefix}${title}`;
       presence.state = artists || "unknown artist(s)";
       presence.largeImageKey = mediaInfo.image;
@@ -187,6 +206,39 @@ const getActivity = (): SetActivity => {
 };
 
 /**
+ * Flip the compact status between title and artist. `updateActivity` dedupes by content,
+ * so this only results in a send while a song is actually being shown with cycling enabled
+ * (`statusDisplayType` is fixed otherwise and absent from the idle / "using" payloads).
+ */
+const cycleStatusDisplay = () => {
+  statusDisplayType =
+    statusDisplayType === STATUS_DISPLAY_DETAILS ? STATUS_DISPLAY_STATE : STATUS_DISPLAY_DETAILS;
+  updateActivity();
+};
+
+const stopStatusCycle = () => {
+  if (statusCycleTimer) {
+    clearInterval(statusCycleTimer);
+    statusCycleTimer = null;
+  }
+  statusDisplayType = STATUS_DISPLAY_STATE;
+};
+
+/**
+ * Start or stop the cycle timer. It only runs while a song is shown with `discord.cycleStatus`
+ * enabled; every start begins a fresh period on the artist, and stopping (setting disabled,
+ * paused, idle) pins the status back to the artist so resuming starts there too.
+ */
+const syncStatusCycle = (cycleStatus: boolean) => {
+  if (cycleStatus && !statusCycleTimer) {
+    statusDisplayType = STATUS_DISPLAY_STATE;
+    statusCycleTimer = setInterval(cycleStatusDisplay, STATUS_CYCLE_INTERVAL);
+  } else if (!cycleStatus && statusCycleTimer) {
+    stopStatusCycle();
+  }
+};
+
+/**
  * Re-publish the current presence after a (re)connect. The dedupe keys are reset so the
  * active track is pushed again even though its content hasn't changed since the drop.
  */
@@ -203,6 +255,7 @@ const onReady = () => {
  * Keep retrying so "presence" resumes automatically once Discord is reachable again.
  */
 const onDisconnected = () => {
+  stopStatusCycle();
   if (!rpcEnabled) return;
   Logger.log("Disconnected from Discord, attempting to reconnect...");
   scheduleReconnect();
@@ -278,6 +331,7 @@ export const initRPC = () => {
 export const unRPC = () => {
   rpcEnabled = false;
   clearReconnectTimer();
+  stopStatusCycle();
   currentRetryDelay = INITIAL_RETRY_DELAY;
   if (rpc) {
     // Remove observer first to prevent events during cleanup from triggering activity updates

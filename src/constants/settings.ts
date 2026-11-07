@@ -36,6 +36,7 @@ export const settings = {
     detailsPrefix: "discord.detailsPrefix",
     buttonText: "discord.buttonText",
     includeTimestamps: "discord.includeTimestamps",
+    cycleStatus: "discord.cycleStatus",
     showSong: "discord.showSong",
     showIdle: "discord.showIdle",
     idleText: "discord.idleText",

@@ -94,6 +94,7 @@ let adBlock: HTMLInputElement,
   enableWaylandSupport: HTMLInputElement,
   discord_details_prefix: HTMLInputElement,
   discord_include_timestamps: HTMLInputElement,
+  discord_cycle_status: HTMLInputElement,
   discord_button_text: HTMLInputElement,
   discord_show_song: HTMLInputElement,
   discord_show_idle: HTMLInputElement,
@@ -285,6 +286,7 @@ function refreshSettings() {
     listenbrainz_delay.value = settingsStore.get(settings.ListenBrainz.delay);
     discord_details_prefix.value = settingsStore.get(settings.discord.detailsPrefix);
     discord_include_timestamps.checked = settingsStore.get(settings.discord.includeTimestamps);
+    discord_cycle_status.checked = settingsStore.get(settings.discord.cycleStatus);
     discord_button_text.value = settingsStore.get(settings.discord.buttonText);
     discord_show_song.checked = settingsStore.get(settings.discord.showSong);
     discord_show_idle.checked = settingsStore.get(settings.discord.showIdle);
@@ -468,6 +470,7 @@ window.addEventListener("DOMContentLoaded", () => {
   ListenBrainzToken = get("ListenBrainzToken");
   discord_details_prefix = get("discord_details_prefix");
   discord_include_timestamps = get("discord_include_timestamps");
+  discord_cycle_status = get("discord_cycle_status");
   listenbrainz_delay = get("listenbrainz_delay");
   discord_button_text = get("discord_button_text");
   discord_show_song = get("discord_show_song");
@@ -531,6 +534,7 @@ window.addEventListener("DOMContentLoaded", () => {
   addInputListener(listenbrainz_delay, settings.ListenBrainz.delay);
   addInputListener(discord_details_prefix, settings.discord.detailsPrefix);
   addInputListener(discord_include_timestamps, settings.discord.includeTimestamps);
+  addInputListener(discord_cycle_status, settings.discord.cycleStatus);
   addInputListener(discord_button_text, settings.discord.buttonText);
   addInputListener(
     discord_show_song,

@@ -60,6 +60,7 @@ const defaultSettings = {
     idleText: "Browsing Tidal",
     usingText: "Playing media on TIDAL",
     includeTimestamps: true,
+    cycleStatus: false,
     detailsPrefix: "Listening to ",
     buttonText: "Play on Tidal",
   },
